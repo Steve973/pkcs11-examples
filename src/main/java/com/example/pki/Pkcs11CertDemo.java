@@ -6,6 +6,8 @@ import com.example.pki.model.*;
 import com.example.pki.stores.Pkcs11Util;
 import com.example.pki.stores.Pkcs12Util;
 import lombok.extern.slf4j.Slf4j;
+import org.bouncycastle.asn1.ASN1Encodable;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.DERBMPString;
 import org.bouncycastle.asn1.DEROctetString;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
@@ -15,7 +17,10 @@ import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.PrivateKey;
 import java.security.Provider;
+import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -51,10 +56,10 @@ public class Pkcs11CertDemo {
             Provider pkcs11Provider = Pkcs11Util.createPkcs11Provider(nssDbPath, "TestProvider");
             CertificateAuthorityMaterial caMaterial = CertAuthorityUtil.createCaCertificateChain();
             List<CertKeyPair> certKeyPairs = new ArrayList<>(generateCertificates(caMaterial));
-            storeCertificatesInDb(certKeyPairs, new X509Certificate[]{caMaterial.intermediateCertificate(), caMaterial.rootCertificate()}, pkcs11Provider);
-            displayDbContents(pkcs11Provider);
             KeyStore pfxStore = createPfxKeyStore(certKeyPairs, caMaterial);
             displayPfxStoreContents(pfxStore);
+            storeCertificatesInDb(certKeyPairs, new X509Certificate[]{caMaterial.intermediateCertificate(), caMaterial.rootCertificate()}, pkcs11Provider);
+            displayDbContents(pkcs11Provider);
         } catch (Exception e) {
             log.error("Error in PKCS#11 demo", e);
         }
@@ -79,7 +84,7 @@ public class Pkcs11CertDemo {
         
         return CertUtil.generateCerts(specs, caMaterial.intermediateKeyPair(), caMaterial.intermediateCertificate(), caMaterial.intermediateSigAlgName());
     }
-    
+
     /**
      * Store certificates in the NSS database with appropriate trust settings.
      */
@@ -142,70 +147,148 @@ public class Pkcs11CertDemo {
     }
 
     /**
-     * Creates a PFX keystore with private keys and their certificate chains
+     * Create a PFX keystore with certificates.
      */
     private KeyStore createPfxKeyStore(List<CertKeyPair> certKeyPairs, CertificateAuthorityMaterial caMaterial) throws Exception {
-        // Add server certificate with its private key
-        CertKeyPair serverCert = certKeyPairs.get(0);
-        List<PfxKeyEntry> keyEntries = List.of(
-                new PfxKeyEntry(
-                        serverCert.privateKey(),
-                        new HashMap<>() {{
-                            put(
-                                    PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
-                                    new DERBMPString("server-key"));
-                            put(
-                                    PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
-                                    new DEROctetString(serverCert.certificate().getPublicKey().getEncoded()));
-                        }}));
+        List<PfxKeyEntry> keyEntries = new ArrayList<>();
+        List<PfxCertEntry> certEntries = new ArrayList<>();
 
-        // Prepare certificate entries for the CA certificates
-        List<PfxCertEntry> certEntries = List.of(
-                new PfxCertEntry(
-                        serverCert.certificate(),
-                        new HashMap<>() {{
-                            put(
-                                    PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
-                                    new DERBMPString("server-cert"));
-                            put(
-                                    PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
-                                    new DEROctetString(serverCert.certificate().getPublicKey().getEncoded()));
-                        }},
-                        false),
-                new PfxCertEntry(
-                        caMaterial.intermediateCertificate(),
-                        new HashMap<>() {{
-                            put(
-                                    PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
-                                    new DERBMPString("Intermediate CA 2"));
-                            put(
-                                    PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
-                                    new DEROctetString(caMaterial.intermediateCertificate().getPublicKey().getEncoded()));
-                        }},
-                        true),
-                new PfxCertEntry(
-                        caMaterial.rootCertificate(),
-                        new HashMap<>() {{
-                            put(
-                                    PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
-                                    new DERBMPString("Root CA"));
-                            put(
-                                    PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
-                                    new DEROctetString(caMaterial.rootCertificate().getPublicKey().getEncoded()));
-                        }},
-                        true));
+        // Add Root CA as a trusted certificate
+        certEntries.add(new PfxCertEntry(
+                caMaterial.rootCertificate(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("root-ca-trust"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(caMaterial.rootCertificate().getPublicKey().getEncoded()));
+                }},
+                true)); // Mark as trusted
 
-        byte[] pfxData = Pkcs12Util.createPfxStore(NSS_DB_PASSWORD.toCharArray(), keyEntries, certEntries);
+        // Add Intermediate CA as a trusted certificate
+        certEntries.add(new PfxCertEntry(
+                caMaterial.intermediateCertificate(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("intermediate-ca-trust"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(caMaterial.intermediateCertificate().getPublicKey().getEncoded()));
+                }},
+                true)); // Mark as trusted
 
+        // Server cert with SSL trust
+        keyEntries.add(new PfxKeyEntry(
+                certKeyPairs.get(0).privateKey(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("server-key"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(certKeyPairs.get(0).certificate().getPublicKey().getEncoded()));
+                }}));
+        certEntries.add(new PfxCertEntry(
+                certKeyPairs.get(0).certificate(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("server-key-trusted"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(certKeyPairs.get(0).certificate().getPublicKey().getEncoded()));
+                }},
+                true));
+
+        // Client cert with client authentication trust
+        keyEntries.add(new PfxKeyEntry(
+                certKeyPairs.get(1).privateKey(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("server-cert"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(certKeyPairs.get(1).certificate().getPublicKey().getEncoded()));
+                }}));
+        certEntries.add(new PfxCertEntry(
+                certKeyPairs.get(1).certificate(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("server-cert-trusted"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(certKeyPairs.get(1).certificate().getPublicKey().getEncoded()));
+                }},
+                true));
+
+        // Code signing cert
+        keyEntries.add(new PfxKeyEntry(
+                certKeyPairs.get(2).privateKey(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("code-signing"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(certKeyPairs.get(2).certificate().getPublicKey().getEncoded()));
+                }}));
+        certEntries.add(new PfxCertEntry(
+                certKeyPairs.get(2).certificate(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("code-signing-trusted"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(certKeyPairs.get(2).certificate().getPublicKey().getEncoded()));
+                }},
+                true));
+
+        // CA cert with full trust
+        keyEntries.add(new PfxKeyEntry(
+                certKeyPairs.get(3).privateKey(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("server-ca"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(certKeyPairs.get(3).certificate().getPublicKey().getEncoded()));
+                }}));
+        certEntries.add(new PfxCertEntry(
+                certKeyPairs.get(3).certificate(),
+                new HashMap<>() {{
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_friendlyName,
+                            new DERBMPString("server-ca-trusted"));
+                    put(
+                            PKCSObjectIdentifiers.pkcs_9_at_localKeyId,
+                            new DEROctetString(certKeyPairs.get(3).certificate().getPublicKey().getEncoded()));
+                }},
+                true));
+
+        // Create the PFX data
+        byte[] pfxData = Pkcs12Util.createPfxStore(
+                NSS_DB_PASSWORD.toCharArray(),
+                keyEntries,
+                certEntries);
+
+        // Load the PFX data into a KeyStore object
         KeyStore keyStore = KeyStore.getInstance("PKCS12", BC_PROVIDER);
-        try (InputStream ksis = new ByteArrayInputStream(pfxData)) {
-            keyStore.load(ksis, NSS_DB_PASSWORD.toCharArray());
-        }
+        InputStream pfxStream = new ByteArrayInputStream(pfxData);
+        keyStore.load(pfxStream, NSS_DB_PASSWORD.toCharArray());
+
         return keyStore;
     }
 
+
     private void displayStoreContents(String name, List<KeyStoreEntryInfo> info) {
         String entryInfo = info.stream()
+                .sorted(Comparator.comparing(KeyStoreEntryInfo::getAlias))
                 .map(KeyStoreEntryInfo::toString)
                 .collect(Collectors.joining("\n"));
         String details = """
