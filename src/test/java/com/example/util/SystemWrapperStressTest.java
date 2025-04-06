@@ -1,6 +1,5 @@
 package com.example.util;
 
-import com.example.util.extension.EnableTestSystemWrapper;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
@@ -10,15 +9,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 @Execution(ExecutionMode.CONCURRENT)
-@EnableTestSystemWrapper
 class SystemWrapperStressTest {
 
     private static boolean evaluateSystemWrapper(String location, int instanceId) {
-        SystemWrapper systemWrapper = SystemWrapperProvider.get();
+        SystemWrapperApi systemWrapper = SystemWrapper.get();
         System.out.printf("%s (Instance %d) in thread: %s%n",
                 location, instanceId, Thread.currentThread().getName());
         return systemWrapper instanceof TestSystemWrapper &&
-                "testValue".equals(systemWrapper.getEnv("TEST_ENV"));
+                "testValue".equals(SystemWrapper.getEnv("TEST_ENV"));
     }
 
     // Create a large ID space for tracking executions
@@ -40,7 +38,7 @@ class SystemWrapperStressTest {
     @Test
     @Timeout(5) // Ensure tests don't hang
     void basicValidation() {
-        assertNotNull(SystemWrapperProvider.get());
+        assertNotNull(SystemWrapper.get());
     }
 
     @RepeatedTest(100)

@@ -1,8 +1,13 @@
 package com.example.util.extension;
 
-import com.example.util.SystemWrapperProvider;
+import com.example.util.SystemWrapper;
 import com.example.util.TestSystemWrapper;
-import org.junit.jupiter.api.extension.*;
+import org.junit.jupiter.api.extension.AfterEachCallback;
+import org.junit.jupiter.api.extension.BeforeAllCallback;
+import org.junit.jupiter.api.extension.BeforeEachCallback;
+import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.extension.TestInstanceFactoryContext;
+import org.junit.jupiter.api.extension.TestInstancePreConstructCallback;
 
 import java.util.Arrays;
 import java.util.Optional;
@@ -13,11 +18,11 @@ public class TestWrapperExtension implements
     private static EnableTestSystemWrapper getConfig(ExtensionContext context) {
         return Optional.ofNullable(context.getRequiredTestClass())
                 .map(testClass -> testClass.getAnnotation(EnableTestSystemWrapper.class))
-                .orElseThrow(() -> new IllegalStateException("EnableTestSystemWrapper annotation not found"));
+                .orElse(new GlobalTestSystemWrapperConfig());
     }
 
     private static void processConfig(EnableTestSystemWrapper.Entry[] props, EnableTestSystemWrapper.Entry[] envVars) {
-        TestSystemWrapper wrapper = (TestSystemWrapper) SystemWrapperProvider.get();
+        TestSystemWrapper wrapper = (TestSystemWrapper) SystemWrapper.get();
         Arrays.stream(props).forEach(prop -> wrapper.setProperty(prop.key(), prop.value()));
         Arrays.stream(envVars).forEach(env -> wrapper.setEnv(env.key(), env.value()));
     }
@@ -43,7 +48,7 @@ public class TestWrapperExtension implements
     @Override
     public void afterEach(ExtensionContext context) {
         EnableTestSystemWrapper config = getConfig(context);
-        TestSystemWrapper wrapper = (TestSystemWrapper) SystemWrapperProvider.get();
+        TestSystemWrapper wrapper = (TestSystemWrapper) SystemWrapper.get();
         if (config.resetPropsAfterEach()) {
             wrapper.resetProperties();
         }

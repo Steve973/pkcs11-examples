@@ -1,6 +1,5 @@
 package com.example.util;
 
-import com.example.util.extension.EnableTestSystemWrapper;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
@@ -13,13 +12,12 @@ import java.util.stream.IntStream;
 import static org.junit.jupiter.api.Assertions.*;
 
 @Execution(ExecutionMode.CONCURRENT)
-@EnableTestSystemWrapper
 public class ThreadContentionThreadLocalTest {
 
     private static boolean evaluateSystemWrapper() {
-        SystemWrapper systemWrapper = SystemWrapperProvider.get();
+        SystemWrapperApi systemWrapper = SystemWrapper.get();
         return systemWrapper instanceof TestSystemWrapper &&
-                "testValue".equals(systemWrapper.getEnv("TEST_ENV"));
+                "testValue".equals(SystemWrapper.getEnv("TEST_ENV"));
     }
 
     @BeforeAll

@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @NoArgsConstructor
-public class TestSystemWrapper extends SystemWrapper {
+public class TestSystemWrapper extends RestrictiveBaseSystemWrapper implements SystemWrapperApi {
 
     /**
      * Constructs a new instance of TestSystemWrapper with the provided properties and environment variables.
@@ -20,16 +20,25 @@ public class TestSystemWrapper extends SystemWrapper {
         this.env.putAll(env);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void setProperty(String key, String value) {
         properties.put(key, value);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void setEnv(String key, String value) {
         env.put(key, value);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void setProperties(Map<String, String> properties) {
         Map<String, String> propertiesUpdateMap = new HashMap<>(properties);
@@ -37,6 +46,9 @@ public class TestSystemWrapper extends SystemWrapper {
         this.properties.putAll(propertiesUpdateMap);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void setEnv(Map<String, String> envs) {
         Map<String, String> envUpdateMap = new HashMap<>(envs);
@@ -45,6 +57,9 @@ public class TestSystemWrapper extends SystemWrapper {
         this.env.putAll(envUpdateMap);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void clearProperty(String key) {
         if (key != null && !key.isEmpty()) {
@@ -52,6 +67,9 @@ public class TestSystemWrapper extends SystemWrapper {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void clearProperties(Collection<String> properties) {
         if (properties == null || properties.isEmpty()) {
@@ -66,6 +84,9 @@ public class TestSystemWrapper extends SystemWrapper {
                 .forEach(p -> this.properties.put(p, null));
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void clearProperties() {
         System.getProperties()
@@ -76,6 +97,9 @@ public class TestSystemWrapper extends SystemWrapper {
                 .forEach(p -> this.properties.put(p, null));
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void resetProperty(String key) {
         if (key != null && !key.isEmpty()) {
@@ -83,6 +107,9 @@ public class TestSystemWrapper extends SystemWrapper {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void resetProperties(Collection<String> properties) {
         if (properties == null || properties.isEmpty()) {
@@ -93,11 +120,17 @@ public class TestSystemWrapper extends SystemWrapper {
                 .forEach(this.properties::remove);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void resetProperties() {
         this.properties.clear();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void clearEnv(String key) {
         if (key != null && !key.isEmpty()) {
@@ -105,6 +138,9 @@ public class TestSystemWrapper extends SystemWrapper {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void clearEnv(Collection<String> envVars) {
         if (envVars == null || envVars.isEmpty()) {
@@ -117,6 +153,9 @@ public class TestSystemWrapper extends SystemWrapper {
                 .forEach(p -> this.env.put(p, null));
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void clearEnv() {
         System.getenv()
@@ -124,6 +163,9 @@ public class TestSystemWrapper extends SystemWrapper {
                 .forEach(p -> this.env.put(p, null));
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void resetEnv(String key) {
         if (key != null && !key.isEmpty()) {
@@ -131,6 +173,9 @@ public class TestSystemWrapper extends SystemWrapper {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void resetEnv(Collection<String> envVars) {
         if (envVars == null || envVars.isEmpty()) {
@@ -141,6 +186,9 @@ public class TestSystemWrapper extends SystemWrapper {
                 .forEach(this.env::remove);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void resetEnv() {
         this.env.clear();

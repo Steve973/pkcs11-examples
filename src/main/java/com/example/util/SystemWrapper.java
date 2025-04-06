@@ -1,27 +1,84 @@
 package com.example.util;
 
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
-public class SystemWrapper {
+public abstract class SystemWrapper {
 
-    public static final String PRODUCTION_ERROR_MSG = "Modifications to system properties are only allowed " +
-            "in a test environment. Use @EnableTestSystemWrapper on the test class to enable system properties " +
-            "or environment variable augmentation/modification.";
+    /**
+     * The "production" system wrapper instance.
+     */
+    private static final RestrictiveBaseSystemWrapper RESTRICTIVE_BASE_SYSTEM_WRAPPER = new RestrictiveBaseSystemWrapper();
 
-    protected final Map<String, String> properties = Collections.synchronizedMap(new HashMap<>());
+    /**
+     * The ThreadLocal holder of the system wrapper, which returns the production system wrapper
+     * singleton instance, unless test mode is enabled, in which case it returns a test system wrapper.
+     */
+    private static final ThreadLocal<RestrictiveBaseSystemWrapper> instance = new InheritableThreadLocal<>() {
 
-    protected final Map<String, String> env = Collections.synchronizedMap(new HashMap<>());
+        @Override
+        protected RestrictiveBaseSystemWrapper initialValue() {
+            return isTestMode() ?
+                    new TestSystemWrapper(
+                            Collections.emptyMap(),
+                            new HashMap<>() {{
+                                put("TEST_ENV", "testValue");
+                            }}) :
+                    RESTRICTIVE_BASE_SYSTEM_WRAPPER;
+        }
 
+        @Override
+        protected RestrictiveBaseSystemWrapper childValue(final RestrictiveBaseSystemWrapper parentValue) {
+            RestrictiveBaseSystemWrapper currentInstance = instance.get();
+            return isTestMode() ?
+                    new TestSystemWrapper(
+                            currentInstance.properties,
+                            currentInstance.env) :
+                    RESTRICTIVE_BASE_SYSTEM_WRAPPER;
+        }
+    };
+
+    private static boolean isTestMode() {
+        return testMode || Arrays.stream(Thread.currentThread().getStackTrace())
+                .filter(element -> element.getClassName().startsWith("org.junit."))
+                .peek(x -> testMode = true)
+                .findFirst()
+                .isPresent();
+    }
+
+    /**
+     * The flag indicating whether the system is in test mode or not.
+     */
+    private static boolean testMode = false;
+
+    /**
+     * Gets the current system wrapper instance.
+     *
+     * @return the current system wrapper instance
+     */
+    public static SystemWrapperApi get() {
+        return instance.get();
+    }
+
+    /**
+     * Returns the production system wrapper singleton instance.
+     *
+     * @return the production system wrapper singleton instance
+     */
+    public static RestrictiveBaseSystemWrapper getProductionWrapper() {
+        return RESTRICTIVE_BASE_SYSTEM_WRAPPER;
+    }
     /**
      * Get the property value associated with the given key.
      *
      * @param key the key to look up in the system properties
      * @return the property value associated with the given key, or null if the property is not found
      */
-    public String getProperty(String key) {
-        return properties.containsKey(key) ? properties.get(key) : System.getProperty(key);
+    public static String getProperty(String key) {
+        return get().getProperty(key);
     }
 
     /**
@@ -34,16 +91,8 @@ public class SystemWrapper {
      * @param keys the keys to look up in the system properties
      * @return a map containing the property values associated with the given keys
      */
-    public Map<String, String> getProperties(Collection<String> keys) {
-        if (keys == null || keys.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return keys.stream()
-                .filter(Objects::nonNull)
-                .map(key -> new AbstractMap.SimpleEntry<>(key, getProperty(key)))
-                .filter(entry -> entry.getValue() != null)
-                .distinct()
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    public static Map<String, String> getProperties(Collection<String> keys) {
+        return get().getProperties(keys);
     }
 
     /**
@@ -55,12 +104,17 @@ public class SystemWrapper {
      * @return a map containing all system properties (modified by entries in the
      * overlay map)
      */
-    public Map<String, String> getProperties() {
-        Set<String> allKeys = Stream.concat(properties.keySet().stream(), System.getProperties().keySet().stream())
-                .filter(key -> key instanceof String)
-                .map(String.class::cast)
-                .collect(Collectors.toSet());
-        return getProperties(allKeys);
+    public static Map<String, String> getProperties() {
+        return get().getProperties();
+    }
+
+    /**
+     * Set multiple properties in the system properties overlay map.
+     *
+     * @param properties the map of system properties to be set
+     */
+    public static void setProperties(Map<String, String> properties) {
+        get().setProperties(properties);
     }
 
     /**
@@ -69,8 +123,8 @@ public class SystemWrapper {
      * @param key the key to look up in the environment variables
      * @return the environment variable value associated with the given key, or null if it is not found
      */
-    public String getEnv(String key) {
-        return env.containsKey(key) ? env.get(key) : System.getenv(key);
+    public static String getEnv(String key) {
+        return get().getEnv(key);
     }
 
     /**
@@ -82,16 +136,8 @@ public class SystemWrapper {
      * @param keys the keys to look up in the environment variables
      * @return a map containing the environment variables and their values associated with the given keys
      */
-    public Map<String, String> getEnv(Collection<String> keys) {
-        if (keys == null || keys.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return keys.stream()
-                .filter(Objects::nonNull)
-                .map(key -> new AbstractMap.SimpleEntry<>(key, getEnv(key)))
-                .filter(entry -> entry.getValue() != null)
-                .distinct()
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    public static Map<String, String> getEnv(Collection<String> keys) {
+        return get().getEnv(keys);
     }
 
     /**
@@ -103,39 +149,8 @@ public class SystemWrapper {
      * @return a map containing all environment variables (modified by entries in the
      * overlay map)
      */
-    public Map<String, String> getEnv() {
-        Set<String> allKeys = Stream.concat(env.keySet().stream(), System.getenv().keySet().stream())
-                .collect(Collectors.toSet());
-        return getProperties(allKeys);
-    }
-
-    /**
-     * Set a property in the system properties overlay map.
-     *
-     * @param key the system property key to be set
-     * @param value the value to be set for the system property key
-     */
-    public void setProperty(String key, String value) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
-    }
-
-    /**
-     * Set multiple properties in the system properties overlay map.
-     *
-     * @param properties the map of system properties to be set
-     */
-    public void setProperties(Map<String, String> properties) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
-    }
-
-    /**
-     * Set an environment variable in the environment overlay map.
-     *
-     * @param key the environment variable key to be set
-     * @param value the value to be set for the environment variable key
-     */
-    public void setEnv(String key, String value) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static Map<String, String> getEnv() {
+        return get().getEnv();
     }
 
     /**
@@ -143,8 +158,28 @@ public class SystemWrapper {
      *
      * @param envs the map of environment variables to be set
      */
-    public void setEnv(Map<String, String> envs) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void setEnv(Map<String, String> envs) {
+        get().setEnv(envs);
+    }
+
+    /**
+     * Set a property in the system properties overlay map.
+     *
+     * @param key   the system property key to be set
+     * @param value the value to be set for the system property key
+     */
+    public static void setProperty(String key, String value) {
+        get().setProperty(key, value);
+    }
+
+    /**
+     * Set an environment variable in the environment overlay map.
+     *
+     * @param key   the environment variable key to be set
+     * @param value the value to be set for the environment variable key
+     */
+    public static void setEnv(String key, String value) {
+        get().setEnv(key, value);
     }
 
     /**
@@ -155,8 +190,8 @@ public class SystemWrapper {
      *
      * @param key the system property key to be cleared
      */
-    public void clearProperty(String key) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void clearProperty(String key) {
+        get().setProperty(key, null);
     }
 
     /**
@@ -168,8 +203,8 @@ public class SystemWrapper {
      *
      * @param properties the map of system properties to be cleared
      */
-    public void clearProperties(Collection<String> properties) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void clearProperties(Collection<String> properties) {
+        get().clearProperties(properties);
     }
 
     /**
@@ -178,8 +213,8 @@ public class SystemWrapper {
      * overlay map will hide them. You need to remove these entries from the map in order
      * to make the original system properties visible again.
      */
-    public void clearProperties() {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void clearProperties() {
+        get().clearProperties();
     }
 
     /**
@@ -188,8 +223,8 @@ public class SystemWrapper {
      *
      * @param key the system property key to be reset
      */
-    public void resetProperty(String key) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void resetProperty(String key) {
+        get().resetProperty(key);
     }
 
     /**
@@ -198,16 +233,16 @@ public class SystemWrapper {
      *
      * @param properties the keys of system properties to be cleared
      */
-    public void resetProperties(Collection<String> properties) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void resetProperties(Collection<String> properties) {
+        get().resetProperties(properties);
     }
 
     /**
      * Removes all entries in the properties overlay map, thereby letting these entries in the system
      * become exposed.
      */
-    public void resetProperties() {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void resetProperties() {
+        get().resetProperties();
     }
 
     /**
@@ -218,8 +253,8 @@ public class SystemWrapper {
      *
      * @param key the environment variable key to be cleared
      */
-    public void clearEnv(String key) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void clearEnv(String key) {
+        get().clearEnv(key);
     }
 
     /**
@@ -231,8 +266,8 @@ public class SystemWrapper {
      *
      * @param envVars the keys of environment variables to be cleared
      */
-    public void clearEnv(Collection<String> envVars) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void clearEnv(Collection<String> envVars) {
+        get().clearEnv(envVars);
     }
 
     /**
@@ -241,8 +276,8 @@ public class SystemWrapper {
      * overlay map will hide them. You need to remove these entries from the map in order
      * to make the original environment variables visible again.
      */
-    public void clearEnv() {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void clearEnv() {
+        get().clearEnv();
     }
 
     /**
@@ -251,8 +286,8 @@ public class SystemWrapper {
      *
      * @param key the environment variable key to be reset
      */
-    public void resetEnv(String key) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void resetEnv(String key) {
+        get().resetEnv(key);
     }
 
     /**
@@ -261,15 +296,15 @@ public class SystemWrapper {
      *
      * @param envVars the map of environment variables to be reset
      */
-    public void resetEnv(Collection<String> envVars) {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void resetEnv(Collection<String> envVars) {
+        get().resetEnv(envVars);
     }
 
     /**
      * Removes all entries in the env overlay map, thereby letting these entries in the system
      * become exposed.
      */
-    public void resetEnv() {
-        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    public static void resetEnv() {
+        get().resetEnv();
     }
 }
