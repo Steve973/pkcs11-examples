@@ -1,0 +1,275 @@
+package com.example.util;
+
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+public class SystemWrapper {
+
+    public static final String PRODUCTION_ERROR_MSG = "Modifications to system properties are only allowed " +
+            "in a test environment. Use @EnableTestSystemWrapper on the test class to enable system properties " +
+            "or environment variable augmentation/modification.";
+
+    protected final Map<String, String> properties = Collections.synchronizedMap(new HashMap<>());
+
+    protected final Map<String, String> env = Collections.synchronizedMap(new HashMap<>());
+
+    /**
+     * Get the property value associated with the given key.
+     *
+     * @param key the key to look up in the system properties
+     * @return the property value associated with the given key, or null if the property is not found
+     */
+    public String getProperty(String key) {
+        return properties.containsKey(key) ? properties.get(key) : System.getProperty(key);
+    }
+
+    /**
+     * Get the property values associated with the given keys. If the keys collection
+     * is null or empty, this method will return an empty map.  If any of the values
+     * associated with the given keys are null, they will be excluded from the result
+     * map. If any of the entries in the keys collection is null, it will be filtered
+     * out, and not processed.
+     *
+     * @param keys the keys to look up in the system properties
+     * @return a map containing the property values associated with the given keys
+     */
+    public Map<String, String> getProperties(Collection<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return keys.stream()
+                .filter(Objects::nonNull)
+                .map(key -> new AbstractMap.SimpleEntry<>(key, getProperty(key)))
+                .filter(entry -> entry.getValue() != null)
+                .distinct()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /**
+     * Gets a map containing all system properties, where any entries that are present
+     * in the system properties overlay map are overridden by that entry.  That may
+     * result in the removal of that entry from the returned map if the entry value
+     * is null.
+     *
+     * @return a map containing all system properties (modified by entries in the
+     * overlay map)
+     */
+    public Map<String, String> getProperties() {
+        Set<String> allKeys = Stream.concat(properties.keySet().stream(), System.getProperties().keySet().stream())
+                .filter(key -> key instanceof String)
+                .map(String.class::cast)
+                .collect(Collectors.toSet());
+        return getProperties(allKeys);
+    }
+
+    /**
+     * Get the environment variable value associated with the given key.
+     *
+     * @param key the key to look up in the environment variables
+     * @return the environment variable value associated with the given key, or null if it is not found
+     */
+    public String getEnv(String key) {
+        return env.containsKey(key) ? env.get(key) : System.getenv(key);
+    }
+
+    /**
+     * Get the environment variable values associated with the given keys.  If any of the values
+     * associated with the given keys are null, they will be excluded from the result
+     * map. If any of the entries in the keys collection is null, it will be filtered
+     * out, and not processed.
+     *
+     * @param keys the keys to look up in the environment variables
+     * @return a map containing the environment variables and their values associated with the given keys
+     */
+    public Map<String, String> getEnv(Collection<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return keys.stream()
+                .filter(Objects::nonNull)
+                .map(key -> new AbstractMap.SimpleEntry<>(key, getEnv(key)))
+                .filter(entry -> entry.getValue() != null)
+                .distinct()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /**
+     * Gets a map containing all environment variables, where any entries that are present
+     * in the environment variable overlay map are overridden by that entry.  That may
+     * result in the removal of that entry from the returned map if the entry value
+     * is null.
+     *
+     * @return a map containing all environment variables (modified by entries in the
+     * overlay map)
+     */
+    public Map<String, String> getEnv() {
+        Set<String> allKeys = Stream.concat(env.keySet().stream(), System.getenv().keySet().stream())
+                .collect(Collectors.toSet());
+        return getProperties(allKeys);
+    }
+
+    /**
+     * Set a property in the system properties overlay map.
+     *
+     * @param key the system property key to be set
+     * @param value the value to be set for the system property key
+     */
+    public void setProperty(String key, String value) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Set multiple properties in the system properties overlay map.
+     *
+     * @param properties the map of system properties to be set
+     */
+    public void setProperties(Map<String, String> properties) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Set an environment variable in the environment overlay map.
+     *
+     * @param key the environment variable key to be set
+     * @param value the value to be set for the environment variable key
+     */
+    public void setEnv(String key, String value) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Set multiple environment variables in the environment overlay map.
+     *
+     * @param envs the map of environment variables to be set
+     */
+    public void setEnv(Map<String, String> envs) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Clears/hides a system property by setting its value to null in the system
+     * properties overlay map. If this system property is present, then this entry in
+     * the overlay map will hide it. You need to remove this entry from the map
+     * in order to make the original system property visible again.
+     *
+     * @param key the system property key to be cleared
+     */
+    public void clearProperty(String key) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Clears/hides the present system properties (with keys matching the keys in the list)
+     * by setting their values in the overlay map to null. If these system properties are
+     * present, then these entries in the overlay map will hide them. You need to remove
+     * these entries from the map in order to make the original system properties visible
+     * again.
+     *
+     * @param properties the map of system properties to be cleared
+     */
+    public void clearProperties(Collection<String> properties) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Clears/hides all present system properties by setting their values in the overlay
+     * map to null. If these system properties are present, then these entries in the
+     * overlay map will hide them. You need to remove these entries from the map in order
+     * to make the original system properties visible again.
+     */
+    public void clearProperties() {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Removes the entry in the properties overlay map, if it exists, thereby letting this entry
+     * in the system become exposed, if it exists.
+     *
+     * @param key the system property key to be reset
+     */
+    public void resetProperty(String key) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Removes the specified entries in the properties overlay map, if they exist, thereby letting these entries
+     * in the system become exposed, if they exist.
+     *
+     * @param properties the keys of system properties to be cleared
+     */
+    public void resetProperties(Collection<String> properties) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Removes all entries in the properties overlay map, thereby letting these entries in the system
+     * become exposed.
+     */
+    public void resetProperties() {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Clears/hides an environment variable by setting its value to null in the env
+     * vars overlay map. If this environment variable is present, then this entry in
+     * the overlay map will hide it. You need to remove this entry from the map
+     * in order to make the original environment variable visible again.
+     *
+     * @param key the environment variable key to be cleared
+     */
+    public void clearEnv(String key) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Clears/hides the present environment variables (with keys matching the keys in the list)
+     * by setting their values in the overlay map to null. If these environment variables are
+     * present, then these entries in the overlay map will hide them. You need to remove
+     * these entries from the map in order to make the original environment variables visible
+     * again.
+     *
+     * @param envVars the keys of environment variables to be cleared
+     */
+    public void clearEnv(Collection<String> envVars) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Clears/hides all present environment variables by setting their values in the overlay
+     * map to null. If these environment variables are present, then these entries in the
+     * overlay map will hide them. You need to remove these entries from the map in order
+     * to make the original environment variables visible again.
+     */
+    public void clearEnv() {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Removes the entry in the env overlay map, if it exists, thereby letting this entry
+     * in the system become exposed, if it exists.
+     *
+     * @param key the environment variable key to be reset
+     */
+    public void resetEnv(String key) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Removes the specified entries in the env overlay map, if they exist, thereby letting these entries
+     * in the system become exposed, if they exist.
+     *
+     * @param envVars the map of environment variables to be reset
+     */
+    public void resetEnv(Collection<String> envVars) {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+
+    /**
+     * Removes all entries in the env overlay map, thereby letting these entries in the system
+     * become exposed.
+     */
+    public void resetEnv() {
+        throw new UnsupportedOperationException(PRODUCTION_ERROR_MSG);
+    }
+}
